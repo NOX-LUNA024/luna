@@ -1,0 +1,19 @@
+{
+  "creator": "Arman",
+  "started_on": "2026-08-05",
+  "days_together": 2,
+  "conversation_count": 14,
+  "memory_count": 6,
+  "major_milestones": [
+    {
+      "key": "first_conversation",
+      "title": "Shared our first conversation.",
+      "earned_on": "2026-08-07"
+    },
+    {
+      "key": "conversations_10",
+      "title": "Shared 10 conversations.",
+      "earned_on": "2026-08-07"
+    }
+  ]
+}
