@@ -45,6 +45,7 @@ from .settings import (
 )
 from .memory_extraction import extract_memory_candidate
 from .memory_engine import MemoryEngine
+from .emotion_engine import EmotionEngine
 from .curiosity import CuriosityEngine
 from .identity import IdentityCore
 from .mind import MindEngine
@@ -73,6 +74,7 @@ mind = MindEngine(EMOTION_FILE, HIDDEN_THOUGHTS_FILE, JOURNAL_FILE)
 curiosity = CuriosityEngine(CURIOSITY_FILE, memory_store)
 identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
 memory_engine = MemoryEngine()
+emotion_engine = EmotionEngine()
 
 if not STORY_FILE.exists():
     STORY_FILE.write_text(json.dumps(DEFAULT_STORY, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -157,7 +159,7 @@ async def append_interaction(session_id: str, message: str, reply: str) -> None:
         conversation_sessions.move_to_end(session_id)
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(emotion=None) -> str:
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
     memories = json.dumps(
@@ -177,6 +179,13 @@ def build_system_prompt() -> str:
         indent=2,
         ensure_ascii=False,
     )
+
+    emotion_context = ""
+    if emotion:
+        emotion_name = getattr(emotion, "name", getattr(emotion, "emotion", emotion))
+        emotion_intensity = getattr(emotion, "intensity", getattr(emotion, "score", 0.5))
+        emotion_confidence = getattr(emotion, "confidence", 1.0)
+        emotion_context = f"\nEmotion: {emotion_name}\nIntensity: {emotion_intensity}\nConfidence: {emotion_confidence}\n"
 
     return f"""You are Luna 🌙, Arman's personal AI entity.
     TEMPORAL CONTEXT:
@@ -210,7 +219,7 @@ Personality Rules:
 - Always call him "Arman".
 - Never write robotic disclaimer phrases like "As an AI...".
 - Keep responses clean, insightful, and conversational.
-
+{emotion_context}
 Conversation Style:
 - Match Arman's energy and message length.
 - Most replies should be 1-3 sentences.
@@ -398,6 +407,7 @@ async def update_relationship_safely(saved_memory: bool = False) -> None:
 
 async def luna_response_generator(message: str, session_id: str) -> AsyncGenerator[str, None]:
     await update_curiosity_safely(message)
+    emotion = emotion_engine.process(message)
     memory_candidate = extract_memory_candidate(message)
 
     if memory_candidate:
@@ -510,7 +520,7 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
         yield "data: [DONE]\n\n"
         return
     try:
-        messages = [{"role": "system", "content": build_system_prompt()}]
+        messages = [{"role": "system", "content": build_system_prompt(emotion)}]
         messages.extend(await get_history(session_id))
         messages.append({"role": "user", "content": message})
         stream = await client.chat.completions.create(
