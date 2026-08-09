@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .storage import JsonStore
 
@@ -56,32 +57,32 @@ class IdentityCore:
 
     async def record_interaction(self, memory_count: int, saved_memory: bool = False) -> list[str]:
         """Update private metrics and append a milestone exactly once when earned."""
-        today = date.today()
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date()
         earned_titles: list[str] = []
 
         def update(current: dict[str, Any]) -> dict[str, Any]:
             relationship = dict(DEFAULT_RELATIONSHIP | current)
-            started_on = date.fromisoformat(relationship["started_on"])
+            started_on = datetime.fromisoformat(relationship["started_on"]).date()
             relationship["days_together"] = max(0, (today - started_on).days)
             relationship["conversation_count"] = int(relationship["conversation_count"]) + 1
             relationship["memory_count"] = memory_count
             milestones = list(relationship.get("major_milestones", []))
 
-            earned = self._add_milestone(milestones, "first_conversation", "Shared our first conversation.")
+            earned = self._add_milestone(milestones, "first_conversation", "Shared our first conversation.", today)
             if earned:
                 earned_titles.append(earned)
             if saved_memory and memory_count:
-                earned = self._add_milestone(milestones, "first_memory", "Luna held her first long-term memory.")
+                earned = self._add_milestone(milestones, "first_memory", "Luna held her first long-term memory.", today)
                 if earned:
                     earned_titles.append(earned)
             count = relationship["conversation_count"]
             if count in MILESTONE_CONVERSATION_COUNTS:
-                earned = self._add_milestone(milestones, f"conversations_{count}", f"Shared {count} conversations.")
+                earned = self._add_milestone(milestones, f"conversations_{count}", f"Shared {count} conversations.", today)
                 if earned:
                     earned_titles.append(earned)
             if relationship["days_together"] in (7, 30, 365):
                 days = relationship["days_together"]
-                earned = self._add_milestone(milestones, f"days_{days}", f"Celebrated {days} days together.")
+                earned = self._add_milestone(milestones, f"days_{days}", f"Celebrated {days} days together.", today)
                 if earned:
                     earned_titles.append(earned)
             relationship["major_milestones"] = milestones
@@ -91,8 +92,8 @@ class IdentityCore:
         return earned_titles
 
     @staticmethod
-    def _add_milestone(milestones: list[dict[str, Any]], key: str, title: str) -> str | None:
+    def _add_milestone(milestones: list[dict[str, Any]], key: str, title: str, today: Any) -> str | None:
         if not any(milestone["key"] == key for milestone in milestones):
-            milestones.append({"key": key, "title": title, "earned_on": date.today().isoformat()})
+            milestones.append({"key": key, "title": title, "earned_on": today.isoformat()})
             return title
         return None
