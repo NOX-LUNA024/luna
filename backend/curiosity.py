@@ -84,11 +84,20 @@ class CuriosityEngine:
         self, completed: list[str], user_message: str, recent_history: list[dict[str, str]]
     ) -> dict[str, str] | None:
         memories = self.memory_store.data
-        if "favorite_game_detail" not in completed and (game := memories.get("favorite game")):
+        favorites = memories.get("favorites", {}) if isinstance(memories, dict) else {}
+
+        games = favorites.get("games")
+        if isinstance(games, list):
+            game = ", ".join(str(g) for g in games if g) if games else None
+        else:
+            game = games
+
+        if "favorite_game_detail" not in completed and game:
             return {
                 "key": "favorite_game_detail",
                 "question": f"What do you enjoy most about {game}, Arman?",
             }
+
         recent_text = " ".join(item.get("content", "") for item in recent_history[-6:]).casefold()
         if "project_next_step" not in completed and any(
             cue in f"{user_message} {recent_text}".casefold() for cue in ("project", "build", "code", "study")
@@ -97,9 +106,16 @@ class CuriosityEngine:
                 "key": "project_next_step",
                 "question": "What part would you like to make progress on next, Arman?",
             }
-        if "favorite_colors_detail" not in completed and (colors := memories.get("favorite colors")):
+
+        colors = favorites.get("colors")
+        if isinstance(colors, list):
+            color_str = ", ".join(str(c) for c in colors if c) if colors else None
+        else:
+            color_str = colors
+
+        if "favorite_colors_detail" not in completed and color_str:
             return {
                 "key": "favorite_colors_detail",
-                "question": f"What do you like most about {colors} together, Arman?",
+                "question": f"What do you like most about {color_str} together, Arman?",
             }
         return None
