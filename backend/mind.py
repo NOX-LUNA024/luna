@@ -6,8 +6,9 @@ chain-of-thought. Nothing here is sent to the browser.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from .storage import JsonStore
 
@@ -84,7 +85,7 @@ class MindEngine:
         )
 
     async def _upsert_journal(self, user_message: str, saved_memory: tuple[str, str] | None) -> None:
-        today = date.today().isoformat()
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
         if saved_memory:
             highlight = f"Remembered Arman's {saved_memory[0]}: {saved_memory[1]}."
         elif "?" in user_message:
@@ -106,7 +107,7 @@ class MindEngine:
         """Add newly earned relationship milestones to today's private journal."""
         if not achievements:
             return
-        today = date.today().isoformat()
+        today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
 
         def update(journal_data: dict[str, dict[str, object]]) -> dict[str, dict[str, object]]:
             journal = dict(journal_data)
