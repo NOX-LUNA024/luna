@@ -1,17 +1,76 @@
 [
-    {
-        "date": "August 5, 2026",
-        "title": "\ud83c\udf19 Luna's Birthday",
-        "desc": "Luna was born."
-    },
-    {
-        "date": "August 6, 2026",
-        "title": "\u26a1 Groq SSE Streaming",
-        "desc": "Switched to real-time async token streaming."
-    },
-    {
-        "date": "August 7, 2026",
-        "title": "\u2728 Luna Space Launch",
-        "desc": "Evolved from a dashboard into a true AI companion space."
-    }
+  {
+    "date": "August 5, 2026",
+    "title": "🌙 Luna's Birthday",
+    "desc": "Luna was born."
+  },
+  {
+    "date": "August 6, 2026",
+    "title": "⚡ Groq SSE Streaming",
+    "desc": "Switched to real-time async token streaming."
+  },
+  {
+    "date": "August 7, 2026",
+    "title": "✨ Luna Space Launch",
+    "desc": "Evolved from a dashboard into a true AI companion space."
+  },
+  {
+    "date": "2026-08-07",
+    "title": "First Git Commit",
+    "desc": "Created the first Git commit for Luna.",
+    "importance": 10,
+    "tags": [
+      "git",
+      "project",
+      "luna"
+    ]
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite game.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite game.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite game.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's hobby.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite drink.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-08",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite movie.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-09",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's likes.",
+    "importance": 8
+  },
+  {
+    "date": "2026-08-09",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's likes.",
+    "importance": 8
+  }
 ]

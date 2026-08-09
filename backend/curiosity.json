@@ -2,7 +2,8 @@
   "pending": null,
   "completed": [
     "favorite_game_detail",
-    "favorite_colors_detail"
+    "favorite_colors_detail",
+    "project_next_step"
   ],
   "turns_since_question": 2
 }

@@ -1,8 +1,73 @@
 {
-  "name": "Arman",
-  "birthday": "24 May 2008",
-  "favorite_food": "biryani",
-  "favorite colors": "Blue and Black",
-  "favorite game": "The Legend of Zelda",
-  "luna birthday": "5 August"
+  "personal": {
+    "name": "Arman",
+    "nickname": "Armu",
+    "birthday": "24 May 2008"
+  },
+  "family": {
+    "mother": {
+      "name": "Akhi"
+    },
+    "father": {
+      "name": "Abshar"
+    },
+    "brother": {
+      "name": "Arsh"
+    }
+  },
+  "favorites": {
+    "foods": [
+      "Biryani",
+      "Pasta",
+      "Shawarma",
+      "Haleem"
+    ],
+    "drinks": [
+      "Milk-based drinks",
+      "Coffee"
+    ],
+    "colors": [
+      "Blue",
+      "Black"
+    ],
+    "games": [
+      "The Legend of Zelda",
+      "Pokémon",
+      "hertopia",
+      "Badminton"
+    ],
+    "movies": [
+      "MS Dhoni: The Untold Story",
+      "Spider-Man: No Way Home",
+      "Harry Potter"
+    ],
+    "anime": [
+      "That Time I Got Reincarnated as a Slime"
+    ],
+    "songs": [
+      "Finding Her"
+    ]
+  },
+  "hobbies": [
+    "Playing Hertopia"
+  ],
+  "education": {
+    "branch": "AIML",
+    "graduation_year": 2030
+  },
+  "dreams": {
+    "goal": "Build a successful startup and my own company.",
+    "current_project": "Build Luna into a lifelong AI companion."
+  },
+  "lifestyle": {
+    "sleep_schedule": "Late nights",
+    "likes_coffee": true
+  },
+  "luna": {
+    "creator": "Arman",
+    "birthday": "5 August"
+  },
+  "preferences": {
+    "likes": "criket also to watch"
+  }
 }

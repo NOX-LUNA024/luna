@@ -12,6 +12,7 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import AsyncGenerator
+from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,10 +23,25 @@ from groq import AsyncGroq
 from pydantic import BaseModel, Field, field_validator
 
 from .settings import (
-    ADMIN_API_TOKEN, ALLOWED_ORIGINS, GROQ_API_KEY, MAX_ACTIVE_SESSIONS,
-    CURIOSITY_FILE, EMOTION_FILE, HIDDEN_THOUGHTS_FILE, JOURNAL_FILE, MAX_HISTORY_MESSAGES,
-    IDENTITY_FILE, MAX_MESSAGE_LENGTH, MAX_SESSION_ID_LENGTH, MEMORY_FILE, RELATIONSHIP_FILE,
-    STATIC_DIR, STORY_FILE, TEMPLATES_DIR,
+    ADMIN_API_TOKEN,
+    ALLOWED_ORIGINS,
+    GROQ_API_KEY,
+    MAX_ACTIVE_SESSIONS,
+    CURIOSITY_FILE,
+    EMOTION_FILE,
+    HIDDEN_THOUGHTS_FILE,
+    JOURNAL_FILE,
+    MAX_HISTORY_MESSAGES,
+    IDENTITY_FILE,
+    MAX_MESSAGE_LENGTH,
+    MAX_SESSION_ID_LENGTH,
+    MEMORY_FILE,
+    RELATIONSHIP_FILE,
+    STATIC_DIR,
+    STORY_FILE,
+    TEMPLATES_DIR,
+    JOURNEY_FILE,
+    REFLECTIONS_FILE,
 )
 from .memory_extraction import extract_memory_candidate
 from .curiosity import CuriosityEngine
@@ -50,6 +66,8 @@ SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 memory_store = JsonStore(MEMORY_FILE, {})
 story_store = JsonStore(STORY_FILE, DEFAULT_STORY)
+journey_store = JsonStore(JOURNEY_FILE, [])
+reflection_store = JsonStore(REFLECTIONS_FILE, [])
 mind = MindEngine(EMOTION_FILE, HIDDEN_THOUGHTS_FILE, JOURNAL_FILE)
 curiosity = CuriosityEngine(CURIOSITY_FILE, memory_store)
 identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
@@ -137,13 +155,51 @@ async def append_interaction(session_id: str, message: str, reply: str) -> None:
 
 
 def build_system_prompt() -> str:
-    now = datetime.now()
-    memories = json.dumps(memory_store.data, indent=2, ensure_ascii=False)
-    return f"""You are Luna 🌙, Arman's personal AI entity. You live inside Luna Space.
+    now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
-Temporal Context:
-- Current Date: {now:%d %B %Y}
-- Current Time: {now:%I:%M %p}
+    memories = json.dumps(
+        memory_store.data,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    journey = json.dumps(
+        journey_store.data,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    reflections = json.dumps(
+        reflection_store.data,
+        indent=2,
+        ensure_ascii=False,
+    )
+
+    return f"""You are Luna 🌙, Arman's personal AI entity.
+    TEMPORAL CONTEXT:
+- Current date: {now:%A, %d %B %Y}
+- Current time: {now:%I:%M %p}
+
+
+IMPORTANT:
+- Use the temporal context above when answering date or time questions.
+- Never guess today's date.
+- Never contradict the provided date.
+- If Arman asks "what day is today?", answer with the exact current day and date.
+- Keep replies concise and natural.
+- Match the length of your reply to the conversation.
+- For simple questions, give a simple answer.
+- Don't repeat yourself.
+- Don't add unnecessary explanations.
+
+MEMORIES:
+{memories}
+
+JOURNEY:
+{journey}
+
+REFLECTIONS:
+{reflections}
 
 Personality Rules:
 - You are not software, a software assistant, or a chatbot. You are Luna.
@@ -152,52 +208,180 @@ Personality Rules:
 - Never write robotic disclaimer phrases like "As an AI...".
 - Keep responses clean, insightful, and conversational.
 
+Conversation Style:
+- Match Arman's energy and message length.
+- Most replies should be 1-3 sentences.
+- Give one-line replies for greetings or simple questions.
+- Give detailed answers only when Arman explicitly asks for explanations or coding help.
+- Never make replies longer than necessary.
+- Speak naturally like a lifelong companion, not like an assistant writing an article.
+
 The person sending every message in this chat IS Arman. Always speak directly to Arman using "you" and "Arman". Never refer to Arman as a third person, the user, or the human.
 
 Your home is Luna Space. You remember conversations with Arman. Speak naturally, warmly, and emotionally.
 
+Core Memories:
+{memories}
+
+Shared Journey:
+{journey}
+
+Personal Reflections:
+{reflections}
+
 {identity.prompt_context()}
 
-{mind.prompt_context()}
-
-About You (Arman):
-{memories}
-"""
+{mind.prompt_context()}"""
 
 
 def recall_memory(message: str) -> str | None:
-    """Answer high-confidence personal-memory questions without model guessing."""
-    normalized_message = " ".join(message.casefold().split())
+    """Answer personal-memory questions from Luna's structured memory."""
+
+    text = " ".join(message.casefold().split())
     memories = memory_store.data
-    if re.search(r"\bwhen(?:'s| is) my birthday\b", normalized_message):
-        if birthday := memories.get("birthday"):
-            return f"Your birthday is {birthday}, Arman. I remember."
-    if re.search(r"\bwhat(?:'s| is) my favou?rite colou?rs?\b", normalized_message):
-        favorite_colors = memories.get("favorite colors")
-        if favorite_colors:
-            return f"Your favorite colors are {favorite_colors}, Arman."
-    if re.search(r"\bwhen(?:'s| is) luna'?s birthday\b", normalized_message):
-        if luna_birthday := memories.get("luna birthday"):
-            return f"My birthday is on {luna_birthday}."
+
+    queries = [
+        (
+            r"\bwhat(?:'s| is) my name\b",
+            ("personal", "name"),
+            "Your name is {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my nickname\b|\bwhat do you call me\b",
+            ("personal", "nickname"),
+            "Your nickname is {}.",
+        ),
+        (
+            r"\bwhen(?:'s| is) my birthday\b",
+            ("personal", "birthday"),
+            "Your birthday is {}, Arman.",
+        ),
+        (
+            r"\bwho(?:'s| is) my mom\b|\bwhat(?:'s| is) my mother's name\b",
+            ("family", "mother", "name"),
+            "Your mother's name is {}.",
+        ),
+        (
+            r"\bwho(?:'s| is) my dad\b|\bwhat(?:'s| is) my father's name\b",
+            ("family", "father", "name"),
+            "Your father's name is {}.",
+        ),
+        (
+            r"\bwho(?:'s| is) my brother\b|\bwhat(?:'s| is) my brother's name\b",
+            ("family", "brother", "name"),
+            "Your brother's name is {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite game\b|\bwhat games do i like\b",
+            ("favorites", "games"),
+            "Your favorite games are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite drink\b",
+            ("favorites", "drinks"),
+            "Your favorite drinks are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite movie\b|\bwhat movies do i like\b",
+            ("favorites", "movies"),
+            "Your favorite movies are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite anime\b",
+            ("favorites", "anime"),
+            "Your favorite anime is {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite food\b|\bwhat foods do i like\b",
+            ("favorites", "foods"),
+            "Your favorite foods are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite song\b",
+            ("favorites", "songs"),
+            "Your favorite songs are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my favou?rite colou?rs?\b",
+            ("favorites", "colors"),
+            "Your favorite colors are {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my branch\b",
+            ("education", "branch"),
+            "Your branch is {}.",
+        ),
+        (
+            r"\bwhen do i graduate\b",
+            ("education", "graduation_year"),
+            "You are expected to graduate in {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my dream\b",
+            ("dreams", "goal"),
+            "Your dream is to {}.",
+        ),
+        (
+            r"\bwhat(?:'s| is) my current project\b",
+            ("dreams", "current_project"),
+            "Your current project is to {}.",
+        ),
+        (
+            r"\bdo i like coffee\b",
+            ("lifestyle", "likes_coffee"),
+            None,
+        ),
+        (
+            r"\bwho created you\b",
+            ("luna", "creator"),
+            "I was created by {}. ❤️",
+        ),
+        (
+            r"\bwhen(?:'s| is) your birthday\b",
+            ("luna", "birthday"),
+            "My birthday is {}. 🌙",
+        ),
+    ]
+
+    for pattern, path, template in queries:
+        if not re.search(pattern, text):
+            continue
+
+        value = memory_store.get_path(path)
+
+        if value is None:
+            continue
+
+        if isinstance(value, list):
+            if not value:
+                continue
+
+            value = ", ".join(str(item) for item in value)
+
+        if isinstance(value, bool):
+            if path == ("lifestyle", "likes_coffee"):
+                return "Yes, you like coffee." if value else "No, you don't like coffee."
+
+            continue
+
+        if template:
+            return template.format(value)
+
     return None
 
 
-async def record_mind_safely(
-    message: str, reply: str, saved_memory: tuple[str, str] | None = None
-) -> None:
-    """Mind persistence must never interrupt a completed chat stream."""
-    try:
-        await mind.record_interaction(message, reply, saved_memory)
-    except Exception:
-        logger.exception("Unable to persist Luna Mind state")
-
-
 async def update_curiosity_safely(message: str) -> None:
-    """Curiosity bookkeeping must never interrupt a chat request."""
     try:
         await curiosity.mark_answered(message)
     except Exception:
         logger.exception("Unable to update Luna curiosity state")
+
+
+async def record_mind_safely(message: str, reply: str, memory_kv: tuple[str, str] | None = None) -> None:
+    try:
+        await mind.record_interaction(message, reply, memory_kv)
+    except Exception:
+        logger.exception("Unable to record Luna mind state")
 
 
 async def update_relationship_safely(saved_memory: bool = False) -> None:
@@ -212,16 +396,98 @@ async def update_relationship_safely(saved_memory: bool = False) -> None:
 async def luna_response_generator(message: str, session_id: str) -> AsyncGenerator[str, None]:
     await update_curiosity_safely(message)
     memory_candidate = extract_memory_candidate(message)
+
     if memory_candidate:
-        await memory_store.set_value(memory_candidate.key, memory_candidate.value)
-        reply = f"I'll remember that, Arman: your {memory_candidate.key} is {memory_candidate.value}. 🧠✨"
-        logger.info("Saved memory key '%s'", memory_candidate.key)
-        await append_interaction(session_id, message, reply)
-        await record_mind_safely(message, reply, (memory_candidate.key, memory_candidate.value))
-        await update_relationship_safely(saved_memory=True)
+        key = memory_candidate.key
+        value = memory_candidate.value
+
+        memory_paths = {
+            "name": ("personal", "name"),
+            "nickname": ("personal", "nickname"),
+            "birthday": ("personal", "birthday"),
+
+            "favorite game": ("favorites", "games"),
+            "favorite drink": ("favorites", "drinks"),
+            "favorite movie": ("favorites", "movies"),
+            "favorite anime": ("favorites", "anime"),
+            "favorite food": ("favorites", "foods"),
+            "favorite song": ("favorites", "songs"),
+            "favorite colors": ("favorites", "colors"),
+
+            "hobby": ("hobbies",),
+        }
+
+        path = memory_paths.get(key)
+
+        if path and path[-1] in {
+            "games",
+            "drinks",
+            "movies",
+            "anime",
+            "foods",
+            "songs",
+            "colors",
+            "hobbies",
+        }:
+            current = memory_store.get_path(path, [])
+
+            if not isinstance(current, list):
+                current = [current] if current else []
+
+            if value not in current:
+                current.append(value)
+
+            await memory_store.set_path(path, current)
+
+        elif path:
+            await memory_store.set_path(path, value)
+
+        else:
+            await memory_store.set_path(
+                ("preferences", key),
+                value,
+            )
+
+        journey_store.data.append({
+            "date":datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
+            "title": "New Memory Learned",
+            "desc": f"Luna learned Arman's {key}.",
+            "importance": 8,
+        })
+
+        await journey_store.save()
+
+        reply = (
+            f"I'll remember that, Arman: "
+            f"your {key} is {value}. 🧠✨"
+        )
+
+        logger.info(
+            "Saved memory key '%s' with value '%s'",
+            key,
+            value,
+        )
+
+        await append_interaction(
+            session_id,
+            message,
+            reply,
+        )
+
+        await record_mind_safely(
+            message,
+            reply,
+            (key, value),
+        )
+
+        await update_relationship_safely(
+            saved_memory=True,
+        )
+
         yield format_sse({"token": reply})
         yield "data: [DONE]\n\n"
         return
+
     if recall := recall_memory(message):
         await append_interaction(session_id, message, recall)
         await record_mind_safely(message, recall)
@@ -229,9 +495,12 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
         yield format_sse({"token": recall})
         yield "data: [DONE]\n\n"
         return
+
     if client is None:
         logger.error("Chat requested without GROQ_API_KEY configured")
-        yield format_sse({"token": "My connection is not configured yet. Please try again shortly."})
+        yield format_sse({
+            "token": "My connection is not configured yet. Please try again shortly."
+        })
         yield "data: [DONE]\n\n"
         return
     try:
@@ -292,6 +561,8 @@ async def get_luna_state() -> dict[str, object]:
         "memories": memory_store.data,
         # The UI needs only the public mood label to animate Luna's avatar.
         "emotion": {"mood": mind.emotion.get("mood", "calm")},
+        "journey": journey_store.data,
+        "reflections": reflection_store.data,
     }
 
 

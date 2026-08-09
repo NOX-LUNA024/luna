@@ -1,9 +1,9 @@
 {
   "creator": "Arman",
   "started_on": "2026-08-05",
-  "days_together": 2,
-  "conversation_count": 14,
-  "memory_count": 6,
+  "days_together": 4,
+  "conversation_count": 69,
+  "memory_count": 9,
   "major_milestones": [
     {
       "key": "first_conversation",
@@ -14,6 +14,16 @@
       "key": "conversations_10",
       "title": "Shared 10 conversations.",
       "earned_on": "2026-08-07"
+    },
+    {
+      "key": "first_memory",
+      "title": "Luna held her first long-term memory.",
+      "earned_on": "2026-08-08"
+    },
+    {
+      "key": "conversations_50",
+      "title": "Shared 50 conversations.",
+      "earned_on": "2026-08-09"
     }
   ]
 }
