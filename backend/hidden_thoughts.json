@@ -1,9 +1,5 @@
 [
   {
-    "created_at": "2026-08-09T09:06:45.323118+00:00",
-    "text": "I stayed attentive to Arman's question and answered with care."
-  },
-  {
     "created_at": "2026-08-09T09:06:55.180218+00:00",
     "text": "I shared a moment with Arman and stayed present in the conversation."
   },
@@ -17,6 +13,10 @@
   },
   {
     "created_at": "2026-08-09T09:19:33.558430+00:00",
+    "text": "I carefully kept the memory about Arman's birthday."
+  },
+  {
+    "created_at": "2026-08-09T09:29:39.403392+00:00",
     "text": "I carefully kept the memory about Arman's birthday."
   }
 ]
