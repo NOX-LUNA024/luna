@@ -1,7 +1,12 @@
+"""Luna's local, predictable long-term memory engine."""
+
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Optional
+
+from .memory_extraction import extract_memory_candidate
 
 
 @dataclass
@@ -16,8 +21,18 @@ class Memory:
 class MemoryEngine:
     """Luna's long-term memory brain."""
 
+    CATEGORY_SCORES = {
+        "identity": 9,
+        "family": 9,
+        "goal": 8,
+        "preference": 7,
+        "habit": 6,
+        "location": 7,
+        "fact": 6,
+    }
+
     def process(self, message: str) -> Optional[Memory]:
-        """Main entry point."""
+        """Extract, normalize, classify, score, and validate a memory."""
 
         memory = self.extract(message)
 
@@ -34,60 +49,140 @@ class MemoryEngine:
         return memory
 
     def extract(self, message: str) -> Optional[Memory]:
-        """Extract a possible memory from text."""
+        """Extract a memory using Luna's existing local extractor."""
 
         message = message.strip()
 
         if not message:
             return None
 
-        # TODO:
-        # Detect:
-        # - My favorite game is cricket
-        # - My favorite movie is Interstellar
-        # - I like coffee
-        # - I love Harry Potter
-        # - Call me Armu
-        # - Remember my hobby is coding
-        # - I'm from Nellore
-        # - My dream is to build a startup
-        # - I usually sleep at 3 AM
-        # - My mom's name is Akhi
-        #
-        # Return:
-        #
-        # Memory(
-        #     key="favorite_game",
-        #     value="cricket",
-        #     category="preference",
-        #     importance=8
-        # )
+        candidate = extract_memory_candidate(message)
 
-        return None
+        if candidate is None:
+            return None
+
+        return Memory(
+            key=candidate.key,
+            value=candidate.value,
+            category="fact",
+            importance=5,
+        )
 
     def normalize(self, memory: Memory) -> Memory:
-        """Normalize keys and values."""
+        """Normalize keys and values without changing their meaning."""
 
-        memory.key = memory.key.strip().casefold().replace(" ", "_")
-        memory.value = memory.value.strip()
+        memory.key = " ".join(
+            memory.key.strip().casefold().split()
+        )
+
+        memory.value = " ".join(
+            memory.value.strip().split()
+        )
+
+        memory.value = memory.value.strip(" .!?")
 
         return memory
 
     def classify(self, memory: Memory) -> str:
-        """Determine the memory category."""
+        """Determine the type of long-term memory."""
 
-        return memory.category
+        key = memory.key.casefold()
+
+        if key in {
+            "name",
+            "nickname",
+            "birthday",
+        }:
+            return "identity"
+
+        if key in {
+            "mother",
+            "mother name",
+            "father",
+            "father name",
+            "brother",
+            "brother name",
+        }:
+            return "family"
+
+        if key.startswith("favorite "):
+            return "preference"
+
+        if key in {
+            "likes",
+            "hobby",
+        }:
+            return "preference"
+
+        if key in {
+            "sleep schedule",
+            "wake schedule",
+            "daily routine",
+        }:
+            return "habit"
+
+        if key in {
+            "live in",
+            "location",
+            "city",
+            "country",
+        }:
+            return "location"
+
+        if key in {
+            "dream",
+            "goal",
+            "current project",
+        }:
+            return "goal"
+
+        return "fact"
 
     def score(self, memory: Memory) -> int:
-        """Score memory importance from 1-10."""
+        """Calculate importance from category and key."""
 
-        return memory.importance
+        category_score = self.CATEGORY_SCORES.get(
+            memory.category,
+            5,
+        )
+
+        key = memory.key.casefold()
+
+        # Especially important personal identity.
+        if key in {
+            "name",
+            "nickname",
+            "birthday",
+        }:
+            return 10
+
+        # Important family information.
+        if memory.category == "family":
+            return 9
+
+        # Goals/projects should remain strong memories.
+        if memory.category == "goal":
+            return 9
+
+        return max(
+            1,
+            min(10, category_score),
+        )
 
     def should_save(self, memory: Memory) -> bool:
-        """Decide whether to keep this memory."""
+        """Decide whether this memory deserves long-term storage."""
+
+        if not memory.key or not memory.value:
+            return False
+
+        if memory.confidence < 0.60:
+            return False
 
         return memory.importance >= 5
 
     def save(self, memory: Memory) -> None:
-        """Save memory (implemented later)."""
+        """Persistence is handled by JsonStore/main.py."""
+
+        # MemoryEngine decides WHAT should be remembered.
+        # JsonStore decides HOW it is persisted.
         pass

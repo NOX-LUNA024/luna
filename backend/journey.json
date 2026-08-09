@@ -72,5 +72,11 @@
     "title": "New Memory Learned",
     "desc": "Luna learned Arman's likes.",
     "importance": 8
+  },
+  {
+    "date": "2026-08-09",
+    "title": "New Memory Learned",
+    "desc": "Luna learned Arman's favorite game.",
+    "importance": 7
   }
 ]

@@ -44,6 +44,7 @@ from .settings import (
     REFLECTIONS_FILE,
 )
 from .memory_extraction import extract_memory_candidate
+from .memory_engine import MemoryEngine
 from .curiosity import CuriosityEngine
 from .identity import IdentityCore
 from .mind import MindEngine
@@ -71,6 +72,8 @@ reflection_store = JsonStore(REFLECTIONS_FILE, [])
 mind = MindEngine(EMOTION_FILE, HIDDEN_THOUGHTS_FILE, JOURNAL_FILE)
 curiosity = CuriosityEngine(CURIOSITY_FILE, memory_store)
 identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
+memory_engine = MemoryEngine()
+
 if not STORY_FILE.exists():
     STORY_FILE.write_text(json.dumps(DEFAULT_STORY, indent=2, ensure_ascii=False), encoding="utf-8")
 
@@ -398,95 +401,98 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
     memory_candidate = extract_memory_candidate(message)
 
     if memory_candidate:
-        key = memory_candidate.key
-        value = memory_candidate.value
+        processed_memory = memory_engine.process(message)
 
-        memory_paths = {
-            "name": ("personal", "name"),
-            "nickname": ("personal", "nickname"),
-            "birthday": ("personal", "birthday"),
+        if processed_memory:
+            key = getattr(processed_memory, "key", memory_candidate.key)
+            value = getattr(processed_memory, "value", memory_candidate.value)
 
-            "favorite game": ("favorites", "games"),
-            "favorite drink": ("favorites", "drinks"),
-            "favorite movie": ("favorites", "movies"),
-            "favorite anime": ("favorites", "anime"),
-            "favorite food": ("favorites", "foods"),
-            "favorite song": ("favorites", "songs"),
-            "favorite colors": ("favorites", "colors"),
+            memory_paths = {
+                "name": ("personal", "name"),
+                "nickname": ("personal", "nickname"),
+                "birthday": ("personal", "birthday"),
 
-            "hobby": ("hobbies",),
-        }
+                "favorite game": ("favorites", "games"),
+                "favorite drink": ("favorites", "drinks"),
+                "favorite movie": ("favorites", "movies"),
+                "favorite anime": ("favorites", "anime"),
+                "favorite food": ("favorites", "foods"),
+                "favorite song": ("favorites", "songs"),
+                "favorite colors": ("favorites", "colors"),
 
-        path = memory_paths.get(key)
+                "hobby": ("hobbies",),
+            }
 
-        if path and path[-1] in {
-            "games",
-            "drinks",
-            "movies",
-            "anime",
-            "foods",
-            "songs",
-            "colors",
-            "hobbies",
-        }:
-            current = memory_store.get_path(path, [])
+            path = memory_paths.get(key)
 
-            if not isinstance(current, list):
-                current = [current] if current else []
+            if path and path[-1] in {
+                "games",
+                "drinks",
+                "movies",
+                "anime",
+                "foods",
+                "songs",
+                "colors",
+                "hobbies",
+            }:
+                current = memory_store.get_path(path, [])
 
-            if value not in current:
-                current.append(value)
+                if not isinstance(current, list):
+                    current = [current] if current else []
 
-            await memory_store.set_path(path, current)
+                if value not in current:
+                    current.append(value)
 
-        elif path:
-            await memory_store.set_path(path, value)
+                await memory_store.set_path(path, current)
 
-        else:
-            await memory_store.set_path(
-                ("preferences", key),
+            elif path:
+                await memory_store.set_path(path, value)
+
+            else:
+                await memory_store.set_path(
+                    ("preferences", key),
+                    value,
+                )
+
+            journey_store.data.append({
+                "date": datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
+                "title": "New Memory Learned",
+                "desc": f"Luna learned Arman's {key}.",
+                "importance": getattr(processed_memory, "importance", 8),
+            })
+
+            await journey_store.save()
+
+            reply = (
+                f"I'll remember that, Arman: "
+                f"your {key} is {value}. 🧠✨"
+            )
+
+            logger.info(
+                "Saved memory key '%s' with value '%s'",
+                key,
                 value,
             )
 
-        journey_store.data.append({
-            "date":datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
-            "title": "New Memory Learned",
-            "desc": f"Luna learned Arman's {key}.",
-            "importance": 8,
-        })
+            await append_interaction(
+                session_id,
+                message,
+                reply,
+            )
 
-        await journey_store.save()
+            await record_mind_safely(
+                message,
+                reply,
+                (key, value),
+            )
 
-        reply = (
-            f"I'll remember that, Arman: "
-            f"your {key} is {value}. 🧠✨"
-        )
+            await update_relationship_safely(
+                saved_memory=True,
+            )
 
-        logger.info(
-            "Saved memory key '%s' with value '%s'",
-            key,
-            value,
-        )
-
-        await append_interaction(
-            session_id,
-            message,
-            reply,
-        )
-
-        await record_mind_safely(
-            message,
-            reply,
-            (key, value),
-        )
-
-        await update_relationship_safely(
-            saved_memory=True,
-        )
-
-        yield format_sse({"token": reply})
-        yield "data: [DONE]\n\n"
-        return
+            yield format_sse({"token": reply})
+            yield "data: [DONE]\n\n"
+            return
 
     if recall := recall_memory(message):
         await append_interaction(session_id, message, recall)
