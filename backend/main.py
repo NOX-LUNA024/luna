@@ -43,6 +43,7 @@ from .settings import (
     JOURNEY_FILE,
     REFLECTIONS_FILE,
 )
+from .behavior_engine import BehaviorEngine
 from .context_engine import ContextEngine
 from .emotion_engine import EmotionEngine
 from .intent_engine import IntentEngine
@@ -79,6 +80,7 @@ identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
 memory_engine = MemoryEngine()
 emotion_engine = EmotionEngine()
 intent_engine = IntentEngine()
+behavior_engine = BehaviorEngine()
 context_engine = ContextEngine()
 
 if not STORY_FILE.exists():
@@ -589,11 +591,13 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
             }
 
         intent_res = intent_engine.detect(message)
+        behavior_res = behavior_engine.evaluate(intent_res.intent)
 
         cognitive_ctx = CognitiveContext(
             memory=ctx_res.relevant_memories,
             emotion=emotion_dict,
             intent=intent_res.intent,
+            behavior=behavior_res.behavior,
             curiosity=None,
             identity=identity.identity,
             recent_context=ctx_res.recent_history,

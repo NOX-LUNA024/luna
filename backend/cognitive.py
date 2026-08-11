@@ -13,6 +13,7 @@ class CognitiveContext:
     memory: dict[str, Any] = field(default_factory=dict)
     emotion: dict[str, Any] = field(default_factory=dict)
     intent: str | None = None
+    behavior: str | None = None
     curiosity: str | None = None
     identity: dict[str, Any] = field(default_factory=dict)
     recent_context: list[dict[str, str]] = field(default_factory=list)
@@ -23,6 +24,7 @@ class CognitiveContext:
             "memory": self.memory,
             "emotion": self.emotion,
             "intent": self.intent,
+            "behavior": self.behavior,
             "curiosity": self.curiosity,
             "identity": self.identity,
             "recent_context": self.recent_context,
@@ -42,6 +44,9 @@ class CognitiveContext:
 
         if self.intent:
             parts.append(f"Detected Intent: {self.intent}")
+
+        if self.behavior:
+            parts.append(f"Behavior: {self.behavior}")
 
         if self.curiosity:
             parts.append(f"Pending Question: {self.curiosity}")
