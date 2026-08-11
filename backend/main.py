@@ -43,6 +43,7 @@ from .settings import (
     JOURNEY_FILE,
     REFLECTIONS_FILE,
 )
+from .context_engine import ContextEngine
 from .memory_extraction import extract_memory_candidate
 from .memory_engine import MemoryEngine
 from .emotion_engine import EmotionEngine
@@ -50,6 +51,7 @@ from .curiosity import CuriosityEngine
 from .identity import IdentityCore
 from .mind import MindEngine
 from .storage import JsonStore
+from .cognitive import CognitiveContext
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("luna")
@@ -75,6 +77,7 @@ curiosity = CuriosityEngine(CURIOSITY_FILE, memory_store)
 identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
 memory_engine = MemoryEngine()
 emotion_engine = EmotionEngine()
+context_engine = ContextEngine()
 
 if not STORY_FILE.exists():
     STORY_FILE.write_text(json.dumps(DEFAULT_STORY, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -159,7 +162,10 @@ async def append_interaction(session_id: str, message: str, reply: str) -> None:
         conversation_sessions.move_to_end(session_id)
 
 
-def build_system_prompt(emotion=None) -> str:
+def build_system_prompt(
+    emotion=None,
+    cognitive_ctx: CognitiveContext | None = None,
+) -> str:
     now = datetime.now(ZoneInfo("Asia/Kolkata"))
 
     memories = json.dumps(
@@ -186,6 +192,12 @@ def build_system_prompt(emotion=None) -> str:
         emotion_intensity = getattr(emotion, "intensity", getattr(emotion, "score", 0.5))
         emotion_confidence = getattr(emotion, "confidence", 1.0)
         emotion_context = f"\nEmotion: {emotion_name}\nIntensity: {emotion_intensity}\nConfidence: {emotion_confidence}\n"
+
+    cognitive_context = (
+        f"\nCognitive Context:\n{cognitive_ctx.to_prompt_string()}\n"
+        if cognitive_ctx
+        else ""
+    )
 
     return f"""You are Luna 🌙, Arman's personal AI entity.
     TEMPORAL CONTEXT:
@@ -243,14 +255,14 @@ Personal Reflections:
 
 {identity.prompt_context()}
 
-{mind.prompt_context()}"""
+{mind.prompt_context()}
+{cognitive_context}"""
 
 
 def recall_memory(message: str) -> str | None:
     """Answer personal-memory questions from Luna's structured memory."""
 
     text = " ".join(message.casefold().split())
-    memories = memory_store.data
 
     queries = [
         (
@@ -411,98 +423,129 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
     memory_candidate = extract_memory_candidate(message)
 
     if memory_candidate:
-        processed_memory = memory_engine.process(message)
+        action = getattr(memory_candidate, "action", "add")
+        key = memory_candidate.key
+        value = memory_candidate.value
 
-        if processed_memory:
-            key = getattr(processed_memory, "key", memory_candidate.key)
-            value = getattr(processed_memory, "value", memory_candidate.value)
+        memory_paths = {
+            "name": ("personal", "name"),
+            "nickname": ("personal", "nickname"),
+            "birthday": ("personal", "birthday"),
 
-            memory_paths = {
-                "name": ("personal", "name"),
-                "nickname": ("personal", "nickname"),
-                "birthday": ("personal", "birthday"),
+            "favorite game": ("favorites", "games"),
+            "favorite drink": ("favorites", "drinks"),
+            "favorite movie": ("favorites", "movies"),
+            "favorite anime": ("favorites", "anime"),
+            "favorite food": ("favorites", "foods"),
+            "favorite song": ("favorites", "songs"),
+            "favorite colors": ("favorites", "colors"),
 
-                "favorite game": ("favorites", "games"),
-                "favorite drink": ("favorites", "drinks"),
-                "favorite movie": ("favorites", "movies"),
-                "favorite anime": ("favorites", "anime"),
-                "favorite food": ("favorites", "foods"),
-                "favorite song": ("favorites", "songs"),
-                "favorite colors": ("favorites", "colors"),
+            "hobby": ("hobbies",),
+        }
 
-                "hobby": ("hobbies",),
-            }
+        path = memory_paths.get(key)
 
-            path = memory_paths.get(key)
-
-            if path and path[-1] in {
-                "games",
-                "drinks",
-                "movies",
-                "anime",
-                "foods",
-                "songs",
-                "colors",
-                "hobbies",
-            }:
-                current = memory_store.get_path(path, [])
-
-                if not isinstance(current, list):
-                    current = [current] if current else []
-
-                if value not in current:
-                    current.append(value)
-
-                await memory_store.set_path(path, current)
-
-            elif path:
-                await memory_store.set_path(path, value)
-
-            else:
-                await memory_store.set_path(
-                    ("preferences", key),
-                    value,
-                )
+        # Handle Removal Action (Memory Corrections)
+        if action == "remove" and path:
+            current = memory_store.get_path(path, [])
+            if isinstance(current, list):
+                updated = [item for item in current if str(item).casefold() != value.casefold()]
+                await memory_store.set_path(path, updated)
 
             journey_store.data.append({
                 "date": datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
-                "title": "New Memory Learned",
-                "desc": f"Luna learned Arman's {key}.",
-                "importance": getattr(processed_memory, "importance", 8),
+                "title": "Memory Corrected",
+                "desc": f"Luna removed '{value}' from Arman's {key}s.",
+                "importance": 7,
             })
-
             await journey_store.save()
 
-            reply = (
-                f"I'll remember that, Arman: "
-                f"your {key} is {value}. 🧠✨"
-            )
-
-            logger.info(
-                "Saved memory key '%s' with value '%s'",
-                key,
-                value,
-            )
-
-            await append_interaction(
-                session_id,
-                message,
-                reply,
-            )
-
-            await record_mind_safely(
-                message,
-                reply,
-                (key, value),
-            )
-
-            await update_relationship_safely(
-                saved_memory=True,
-            )
+            reply = f"Got it, Arman! I've removed {value} from your {key}s. 🧠✨"
+            await append_interaction(session_id, message, reply)
+            await record_mind_safely(message, reply)
+            await update_relationship_safely(saved_memory=True)
 
             yield format_sse({"token": reply})
             yield "data: [DONE]\n\n"
             return
+
+        # Handle Addition Action
+        elif action == "add":
+            processed_memory = memory_engine.process(message)
+
+            if processed_memory:
+                key = getattr(processed_memory, "key", memory_candidate.key)
+                value = getattr(processed_memory, "value", memory_candidate.value)
+                path = memory_paths.get(key)
+
+                if path and path[-1] in {
+                    "games",
+                    "drinks",
+                    "movies",
+                    "anime",
+                    "foods",
+                    "songs",
+                    "colors",
+                    "hobbies",
+                }:
+                    current = memory_store.get_path(path, [])
+
+                    if not isinstance(current, list):
+                        current = [current] if current else []
+
+                    if value not in current:
+                        current.append(value)
+
+                    await memory_store.set_path(path, current)
+
+                elif path:
+                    await memory_store.set_path(path, value)
+
+                else:
+                    await memory_store.set_path(
+                        ("preferences", key),
+                        value,
+                    )
+
+                journey_store.data.append({
+                    "date": datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d"),
+                    "title": "New Memory Learned",
+                    "desc": f"Luna learned Arman's {key}.",
+                    "importance": getattr(processed_memory, "importance", 8),
+                })
+
+                await journey_store.save()
+
+                reply = (
+                    f"I'll remember that, Arman: "
+                    f"your {key} is {value}. 🧠✨"
+                )
+
+                logger.info(
+                    "Saved memory key '%s' with value '%s'",
+                    key,
+                    value,
+                )
+
+                await append_interaction(
+                    session_id,
+                    message,
+                    reply,
+                )
+
+                await record_mind_safely(
+                    message,
+                    reply,
+                    (key, value),
+                )
+
+                await update_relationship_safely(
+                    saved_memory=True,
+                )
+
+                yield format_sse({"token": reply})
+                yield "data: [DONE]\n\n"
+                return
 
     if recall := recall_memory(message):
         await append_interaction(session_id, message, recall)
@@ -520,8 +563,41 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
         yield "data: [DONE]\n\n"
         return
     try:
-        messages = [{"role": "system", "content": build_system_prompt(emotion)}]
-        messages.extend(await get_history(session_id))
+        recent_history = await get_history(session_id)
+
+        ctx_res = context_engine.select_context(
+            message,
+            memory_store.data,
+            recent_history,
+        )
+
+        if isinstance(emotion, dict):
+            emotion_dict = emotion
+        elif hasattr(emotion, "__dict__"):
+            emotion_dict = vars(emotion)
+        else:
+            emotion_dict = {
+                "emotion": getattr(emotion, "name", getattr(emotion, "emotion", str(emotion))),
+                "intensity": getattr(emotion, "intensity", getattr(emotion, "score", 0.5)),
+                "confidence": getattr(emotion, "confidence", 1.0),
+            }
+
+        cognitive_ctx = CognitiveContext(
+            memory=ctx_res.relevant_memories,
+            emotion=emotion_dict,
+            curiosity=None,
+            identity=identity.identity,
+            recent_context=ctx_res.recent_history,
+        )
+
+        messages = [{
+            "role": "system",
+            "content": build_system_prompt(
+                emotion,
+                cognitive_ctx=cognitive_ctx,
+            ),
+        }]
+        messages.extend(ctx_res.recent_history)
         messages.append({"role": "user", "content": message})
         stream = await client.chat.completions.create(
             model="llama-3.3-70b-versatile", messages=messages, stream=True,
