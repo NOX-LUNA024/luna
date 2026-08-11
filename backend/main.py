@@ -44,9 +44,10 @@ from .settings import (
     REFLECTIONS_FILE,
 )
 from .context_engine import ContextEngine
-from .memory_extraction import extract_memory_candidate
-from .memory_engine import MemoryEngine
 from .emotion_engine import EmotionEngine
+from .intent_engine import IntentEngine
+from .memory_engine import MemoryEngine
+from .memory_extraction import extract_memory_candidate
 from .curiosity import CuriosityEngine
 from .identity import IdentityCore
 from .mind import MindEngine
@@ -77,6 +78,7 @@ curiosity = CuriosityEngine(CURIOSITY_FILE, memory_store)
 identity = IdentityCore(IDENTITY_FILE, RELATIONSHIP_FILE)
 memory_engine = MemoryEngine()
 emotion_engine = EmotionEngine()
+intent_engine = IntentEngine()
 context_engine = ContextEngine()
 
 if not STORY_FILE.exists():
@@ -577,14 +579,21 @@ async def luna_response_generator(message: str, session_id: str) -> AsyncGenerat
             emotion_dict = vars(emotion)
         else:
             emotion_dict = {
-                "emotion": getattr(emotion, "name", getattr(emotion, "emotion", str(emotion))),
-                "intensity": getattr(emotion, "intensity", getattr(emotion, "score", 0.5)),
+                "emotion": getattr(
+                    emotion, "name", getattr(emotion, "emotion", str(emotion))
+                ),
+                "intensity": getattr(
+                    emotion, "intensity", getattr(emotion, "score", 0.5)
+                ),
                 "confidence": getattr(emotion, "confidence", 1.0),
             }
+
+        intent_res = intent_engine.detect(message)
 
         cognitive_ctx = CognitiveContext(
             memory=ctx_res.relevant_memories,
             emotion=emotion_dict,
+            intent=intent_res.intent,
             curiosity=None,
             identity=identity.identity,
             recent_context=ctx_res.recent_history,
